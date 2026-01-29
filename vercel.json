@@ -1,5 +1,13 @@
 {
-  "outputDirectory": "overlay",
   "buildCommand": "",
-  "framework": null
+  "framework": null,
+  "outputDirectory": "overlay",
+  "functions": {
+    "api/*.js": {
+      "runtime": "@vercel/node@3"
+    }
+  },
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/$1" }
+  ]
 }

@@ -21,8 +21,26 @@
     border: 1px solid #333;
     border-radius: 16px;
     padding: 40px;
-    width: 520px;
+    width: 600px;
     box-shadow: 0 0 60px rgba(100, 100, 255, 0.08);
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Ping flash on action */
+  .panel.ping {
+    animation: pingFlash 0.4s ease-out;
+  }
+  @keyframes pingFlash {
+    0% { box-shadow: 0 0 60px rgba(100, 200, 255, 0.5); }
+    100% { box-shadow: 0 0 60px rgba(100, 100, 255, 0.08); }
+  }
+
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 32px;
   }
 
   .title {
@@ -30,7 +48,18 @@
     text-transform: uppercase;
     letter-spacing: 3px;
     color: #888;
-    margin-bottom: 32px;
+  }
+
+  .latency {
+    font-size: 11px;
+    color: #333;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    transition: all 0.3s ease;
+  }
+  .latency.active {
+    color: #4fc3f7;
+    text-shadow: 0 0 8px rgba(79, 195, 247, 0.5);
   }
 
   .stat {
@@ -48,6 +77,7 @@
     color: #999;
     text-transform: uppercase;
     letter-spacing: 1px;
+    flex-shrink: 0;
   }
 
   .value {
@@ -57,19 +87,29 @@
     transition: color 0.3s ease;
   }
 
-  #temperature-value {
-    color: #4fc3f7;
+  #temperature-value { color: #4fc3f7; }
+  #mode-value { color: #ab47bc; }
+
+  .ai-output {
+    margin-top: 24px;
+    padding: 20px;
+    background: #111;
+    border: 1px solid #222;
+    border-radius: 10px;
+    min-height: 80px;
   }
 
-  #mode-value {
-    color: #ab47bc;
-  }
+  .ai-output .label { margin-bottom: 10px; display: block; }
 
-  #action-value {
-    color: #66bb6a;
-    font-size: 16px;
-    max-width: 300px;
-    text-align: right;
+  #ai-response {
+    font-size: 14px;
+    line-height: 1.6;
+    color: #ccc;
+    transition: opacity 0.2s;
+  }
+  #ai-response.loading {
+    color: #666;
+    font-style: italic;
   }
 
   .temp-bar {
@@ -87,12 +127,41 @@
     border-radius: 3px;
     transition: width 0.2s ease;
   }
+
+  .controls {
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid #222;
+    font-size: 11px;
+    color: #555;
+    line-height: 1.8;
+  }
+
+  .key {
+    display: inline-block;
+    background: #222;
+    color: #aaa;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    margin: 0 2px;
+  }
+
+  .action-label {
+    font-size: 13px;
+    color: #66bb6a;
+    margin-bottom: 4px;
+    min-height: 18px;
+  }
 </style>
 </head>
 <body>
 
-<div class="panel">
-  <div class="title">Luxbin MX Actions</div>
+<div class="panel" id="panel">
+  <div class="header">
+    <div class="title">Luxbin MX Actions</div>
+    <div class="latency" id="latency">LIGHTSPEED &ndash; 1ms</div>
+  </div>
 
   <div class="stat">
     <span class="label">Mode</span>
@@ -109,74 +178,91 @@
     </div>
   </div>
 
-  <div class="stat">
-    <span class="label">Last Action</span>
-    <span class="value" id="action-value">Ready</span>
+  <div class="ai-output">
+    <div class="action-label" id="action-label"></div>
+    <span class="label">AI Response</span>
+    <div id="ai-response">Press a key to trigger an AI action...</div>
+  </div>
+
+  <div class="controls">
+    <span class="key">&uarr;</span><span class="key">&darr;</span> Dial (temperature)
+    &nbsp;&nbsp;
+    <span class="key">1</span> Refactor
+    &nbsp;&nbsp;
+    <span class="key">2</span> Summarize
+    &nbsp;&nbsp;
+    <span class="key">3</span> Build
+    &nbsp;&nbsp;
+    <span class="key">M</span> Mode
   </div>
 </div>
 
 <script>
-  // Simple local server listener for plugin updates
-  // In the demo, we use Server-Sent Events or polling
-
   const tempEl = document.getElementById('temperature-value');
   const fillEl = document.getElementById('temp-fill');
   const modeEl = document.getElementById('mode-value');
-  const actionEl = document.getElementById('action-value');
+  const responseEl = document.getElementById('ai-response');
+  const actionLabelEl = document.getElementById('action-label');
+  const latencyEl = document.getElementById('latency');
+  const panelEl = document.getElementById('panel');
 
   const modes = ['Code', 'Design', 'Deploy'];
   let modeIndex = 0;
+  let temperature = 0.5;
 
-  // Poll for updates from the plugin
-  async function poll() {
-    try {
-      const res = await fetch('http://localhost:9210/state');
-      const data = await res.json();
+  function ping() {
+    // Flash the panel
+    panelEl.classList.remove('ping');
+    void panelEl.offsetWidth;
+    panelEl.classList.add('ping');
 
-      if (data.temperature !== undefined) {
-        const t = parseFloat(data.temperature);
-        tempEl.textContent = t.toFixed(2);
-        fillEl.style.width = (t * 100) + '%';
-      }
-
-      if (data.mode !== undefined) {
-        modeEl.textContent = data.mode;
-      }
-
-      if (data.lastAction !== undefined) {
-        actionEl.textContent = data.lastAction;
-      }
-    } catch {
-      // Plugin not running yet -- that's fine
-    }
+    // Flash the latency indicator
+    latencyEl.classList.add('active');
+    setTimeout(() => latencyEl.classList.remove('active'), 600);
   }
 
-  setInterval(poll, 200);
+  function updateTemp(t) {
+    temperature = Math.round(Math.min(1, Math.max(0, t)) * 100) / 100;
+    tempEl.textContent = temperature.toFixed(2);
+    fillEl.style.width = (temperature * 100) + '%';
+    ping();
+  }
 
-  // Keyboard simulation for demo recording without hardware
+  async function callAI(action) {
+    ping();
+    actionLabelEl.textContent = action.charAt(0).toUpperCase() + action.slice(1);
+    responseEl.textContent = 'Thinking...';
+    responseEl.classList.add('loading');
+
+    try {
+      const res = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, temperature })
+      });
+      const data = await res.json();
+      responseEl.textContent = data.result;
+    } catch {
+      const fallbacks = {
+        refactor: 'Refactored: extracted filter/map, improved naming.',
+        summarize: 'JWT auth module with session tracking.',
+        build: 'Build complete. Preview ready.'
+      };
+      responseEl.textContent = fallbacks[action] || 'Done.';
+    }
+    responseEl.classList.remove('loading');
+  }
+
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'ArrowUp') {
-      const t = Math.min(1, parseFloat(tempEl.textContent) + 0.05);
-      tempEl.textContent = t.toFixed(2);
-      fillEl.style.width = (t * 100) + '%';
-    }
-    if (e.key === 'ArrowDown') {
-      const t = Math.max(0, parseFloat(tempEl.textContent) - 0.05);
-      tempEl.textContent = t.toFixed(2);
-      fillEl.style.width = (t * 100) + '%';
-    }
-    if (e.key === '1') {
-      actionEl.textContent = 'Refactor: cleaned up, improved naming';
-    }
-    if (e.key === '2') {
-      actionEl.textContent = 'Summary: JWT auth + session mgmt';
-    }
-    if (e.key === '3') {
-      actionEl.textContent = 'Preview Build: Done';
-    }
-    if (e.key === 'm') {
+    if (e.key === 'ArrowUp') updateTemp(temperature + 0.05);
+    if (e.key === 'ArrowDown') updateTemp(temperature - 0.05);
+    if (e.key === '1') callAI('refactor');
+    if (e.key === '2') callAI('summarize');
+    if (e.key === '3') callAI('build');
+    if (e.key === 'm' || e.key === 'M') {
       modeIndex = (modeIndex + 1) % modes.length;
       modeEl.textContent = modes[modeIndex];
+      ping();
     }
   });
 </script>
