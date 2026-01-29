@@ -1,6 +1,6 @@
 # Luxbin MX Actions
 
-> Turn your Logitech MX Creative Console into a physical AI command center.
+> Turn your Logitech MX Creative Console into a physical AI command center!
 
 ![Luxbin MX Actions](assets/key-layout.png)
 
